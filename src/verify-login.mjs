@@ -1,68 +1,33 @@
-import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
-import { createLoginVerifier } from '../src/verify-login.mjs';
 
-const config = JSON.parse(
-  readFileSync(new URL('../aleph.config.json', import.meta.url), 'utf8')
-);
-
-let verifyLoginAuthorization = null;
-function getVerifier() {
-  if (!verifyLoginAuthorization) {
-    verifyLoginAuthorization = createLoginVerifier({
-      config,
-      supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
-    });
+export function createLoginVerifier({ config, supabaseUrl, supabaseSecretKey } = {}) {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    throw new TypeError('invalid_login_config');
   }
-  return verifyLoginAuthorization;
-}
-
-export default async function handler(request, response) {
-  response.setHeader('Cache-Control', 'no-store');
-
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const secretKey = process.env.SUPABASE_SECRET_KEY;
-  if (!supabaseUrl || !secretKey) {
-    response.status(500).json({ error: 'SUPABASE_NOT_CONFIGURED' });
-    return;
+  if (typeof supabaseUrl !== 'string' || !supabaseUrl.trim()
+      || typeof supabaseSecretKey !== 'string' || !supabaseSecretKey.trim()) {
+    throw new TypeError('supabase_not_configured');
   }
 
-  // 1. Authorization 헤더의 Bearer 토큰을 verify-login.mjs로 검증
-  const authHeader =
-    request.headers?.authorization ?? request.headers?.Authorization ?? '';
-  let verified = null;
-  try {
-    const verify = getVerifier();
-    verified = await verify(authHeader);
-  } catch (_err) {
-    response.status(500).json({ error: 'AUTH_VERIFIER_ERROR' });
-    return;
-  }
-
-  // 2. 토큰이 없거나 유효하지 않으면 메모 없이 401 JSON 반환
-  if (!verified || !verified.userId) {
-    response.status(401).json({ error: 'UNAUTHORIZED' });
-    return;
-  }
-
-  // 3. 쿼리·헤더의 userId, owner_id, role은 무시하고 verified.userId만 사용
-  try {
-    const supabase = createClient(supabaseUrl, secretKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-
-    const { data, error } = await supabase
-      .from('notes')
-      .select('id, title, body')
-      .eq('owner_id', verified.userId);
-
-    if (error) {
-      response.status(500).json({ error: 'NOTES_READ_FAILED' });
-      return;
+  const configuredIssuer = config.identityProvider?.issuer;
+  if (configuredIssuer !== undefined && configuredIssuer !== null) {
+    const expectedIssuer = `${new URL(supabaseUrl).origin}/auth/v1`;
+    if (configuredIssuer !== expectedIssuer) {
+      throw new TypeError('supabase_issuer_mismatch');
     }
-
-    response.status(200).json({ notes: data ?? [] });
-  } catch (_error) {
-    response.status(500).json({ error: 'NOTES_READ_FAILED' });
   }
+
+  const supabase = createClient(supabaseUrl, supabaseSecretKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+
+  return async function verifyLoginAuthorization(authorization) {
+    if (typeof authorization !== 'string' || authorization.length > 8192) return null;
+    const match = /^Bearer ([^\s]+)$/iu.exec(authorization);
+    if (!match) return null;
+
+    const { data, error } = await supabase.auth.getUser(match[1]);
+    if (error || !data?.user?.id) return null;
+    return Object.freeze({ userId: data.user.id });
+  };
 }
