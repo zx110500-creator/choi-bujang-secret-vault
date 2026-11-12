@@ -1,17 +1,12 @@
-import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { createLoginVerifier } from '../src/verify-login.mjs';
-
-const config = JSON.parse(
-  readFileSync(new URL('../aleph.config.json', import.meta.url), 'utf8')
-);
+import config from '../aleph.config.json' with { type: 'json' };
 
 let verifyLoginAuthorization = null;
 function getVerifier() {
   if (!verifyLoginAuthorization) {
     verifyLoginAuthorization = createLoginVerifier({
       config,
-      supabaseUrl: process.env.SUPABASE_URL,
       supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
     });
   }
@@ -20,6 +15,11 @@ function getVerifier() {
 
 export default async function handler(request, response) {
   response.setHeader('Cache-Control', 'no-store');
+
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
+    return;
+  }
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
