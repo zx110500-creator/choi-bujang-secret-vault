@@ -28,6 +28,7 @@ export default async function handler(request, response) {
     return;
   }
 
+  // 1. Authorization 헤더의 토큰을 src/verify-login.mjs로 검증
   const authHeader =
     request.headers?.authorization ?? request.headers?.Authorization ?? '';
   let verified = null;
@@ -38,11 +39,13 @@ export default async function handler(request, response) {
     return;
   }
 
+  // 2. 토큰이 없거나 유효하지 않으면 메모 없이 401 JSON 반환
   if (!verified?.userId) {
     response.status(401).json({ error: 'UNAUTHORIZED' });
     return;
   }
 
+  // 3. 쿼리·헤더의 userId, owner_id, role은 무시하고 확인된 verified.userId만 사용
   try {
     const supabase = createClient(supabaseUrl, secretKey, {
       auth: { persistSession: false, autoRefreshToken: false },
