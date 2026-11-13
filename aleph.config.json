@@ -14,10 +14,6 @@
     "PUT /api/notes/[id]",
     "DELETE /api/notes/[id]"
   ],
- {
-  "originalApiUrl": "https://여기에_프로젝트ID.supabase.co/rest/v1/여기에_메모테이블이름",
-  "allowedRoutes": [
-    "/api/memos"
-  ]
-}
+  "originalApiUrl": "https://opgtqcxrirndpydbmwjv.supabase.co/rest/v1/notes",
+  "restoreRoute": null
 }
