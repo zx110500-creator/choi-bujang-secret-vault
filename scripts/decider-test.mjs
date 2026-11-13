@@ -29,6 +29,11 @@ export async function checkDecider({ decide, ruleIds }) {
     { name: '미등록 기기의 가상 요청', request: { ...normal, requestId: randomUUID(),
       deviceRegistered: false }, decision: 'deny', reasonCode: 'device_not_registered' },
   ];
+  const withoutDeviceStatus = { ...normal };
+  delete withoutDeviceStatus.deviceRegistered;
+  checks.push({ name: '등록 여부가 없는 가상 요청',
+    request: { ...withoutDeviceStatus, requestId: randomUUID() },
+    decision: 'deny', reasonCode: 'device_not_registered' });
   if (ruleIds.includes('step_up_required')) {
     checks.push(
       { name: '복합 이상 접속', request: suspicious, decision: 'step_up',

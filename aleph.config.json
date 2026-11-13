@@ -1,5 +1,5 @@
 {
-  "step": 5,
+  "step": 6,
   "repoUrl": "https://github.com/zx110500-creator/choi-bujang-secret-vault",
   "publicAppUrl": "https://choi-bujang-secret-vault-tau-one.vercel.app",
   "judgeIssuer": "https://aleph-judge-production.up.railway.app/defense/judge",

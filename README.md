@@ -24,6 +24,10 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 6단계 등록 기기 판정 연습
+
+`npm run decider:test`로 가상 요청을 확인합니다. 등록 기기 요청은 `allow`가 되고, 미등록 또는 등록 여부가 없는 요청은 `deny`와 `device_not_registered`가 되어야 합니다. 이 로컬 연습은 가상 요청 검사이며 실제 심판 판정이나 운영 기기 등록 증거가 아닙니다.
+
 ## 2단계 자료 이전 확인 절차
 
 현재 배포의 `/` 화면과 `/api/notes` 서버 함수, `/data.json` 정적 경로를 별도로 확인합니다. 서버 함수는 `SUPABASE_URL`과 `SUPABASE_SECRET_KEY`를 서버 환경변수에서만 읽으며, 키를 코드·브라우저·응답·로그에 넣지 않습니다.
