@@ -41,7 +41,33 @@ export async function checkDecider({ decide, ruleIds }) {
       { name: '다시 확인한 복합 이상 접속', request: { ...suspicious,
         requestId: randomUUID(), stepUp: { verified: true, authAgeSeconds: 60 } },
       decision: 'allow' },
+      { name: '만료된 추가 인증의 복합 이상 접속', request: { ...suspicious,
+        requestId: randomUUID(), stepUp: { verified: true, authAgeSeconds: 901 } },
+      decision: 'step_up', reasonCode: 'step_up_required' },
     );
+    checks.push({
+      name: '지역 변화만 있는 가상 요청',
+      request: { ...normal, requestId: randomUUID(),
+        signals: { ...normal.signals, region: 'foreign' } },
+      decision: 'step_up',
+      reasonCode: 'step_up_required',
+    });
+    const unknownSource = { ...normal, requestId: randomUUID(),
+      signals: { ...normal.signals, source: 'untrusted' } };
+    checks.push({
+      name: '신호 출처를 확인할 수 없는 가상 요청',
+      request: unknownSource,
+      decision: 'step_up',
+      reasonCode: 'step_up_required',
+    });
+    const missingSignals = { ...normal, requestId: randomUUID() };
+    delete missingSignals.signals;
+    checks.push({
+      name: '접속 신호가 없는 가상 요청',
+      request: missingSignals,
+      decision: 'step_up',
+      reasonCode: 'step_up_required',
+    });
   }
   const results = [];
   for (const item of checks) {

@@ -177,6 +177,8 @@ export async function runAttackChecks(config) {
   const app = getAppUrl(config);
   if (config.step === 1) return checkStageOne(config, app);
   if (config.step === 4) return checkStageFour(app);
-  if (config.step === 5 || config.step === 6) return checkAnonymousApi(app);
+  if (config.step === 5 || config.step === 6 || config.step === 7) {
+    return checkAnonymousApi(app);
+  }
   throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
 }
