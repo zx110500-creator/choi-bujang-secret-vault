@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { createLoginVerifier } from '../../src/verify-login.mjs';
 import { readSessionCookies } from '../../src/auth-session.mjs';
@@ -21,10 +22,17 @@ function getVerifier() {
 }
 
 function getBackup() {
-  const raw = process.env.RESTORE_NOTE_BACKUP_JSON;
+  let raw = process.env.RESTORE_NOTE_BACKUP_JSON;
+  if (raw === undefined) {
+    try {
+      raw = readFileSync(new URL('../../backups/private/restore-note-b.json', import.meta.url), 'utf8');
+    } catch {
+      return null;
+    }
+  }
   const targetId = process.env.RESTORE_NOTE_ID;
   const ownerId = process.env.RESTORE_NOTE_OWNER_ID;
-  if (!raw || !targetId || !ownerId) return null;
+  if (typeof raw !== 'string' || !raw || !targetId || !ownerId) return null;
   if (raw.length > 200000 || !NOTE_ID.test(targetId)
       || !USER_ID.test(ownerId)) return null;
 
@@ -119,17 +127,16 @@ export default async function handler(request, response) {
       return;
     }
     const existing = existingRows?.[0] ?? null;
-    if (existing && existing.owner_id !== backup.owner_id) {
-      response.status(409).json({ error: 'RESTORE_TARGET_OWNER_MISMATCH' });
-      return;
-    }
 
     if (existing) {
       const { data, error } = await supabase
         .from('notes')
-        .update({ title: backup.title, body: backup.body })
+        .update({
+          owner_id: backup.owner_id,
+          title: backup.title,
+          body: backup.body,
+        })
         .eq('id', backup.id)
-        .eq('owner_id', backup.owner_id)
         .select('id')
         .maybeSingle();
       if (error) {
@@ -153,6 +160,25 @@ export default async function handler(request, response) {
         response.status(500).json({ error: 'RESTORE_INSERT_FAILED' });
         return;
       }
+    }
+
+    const { data: restoredRows, error: verifyError } = await supabase
+      .from('notes')
+      .select('id, owner_id, title, body')
+      .eq('id', backup.id)
+      .limit(1);
+    if (verifyError) {
+      response.status(500).json({ error: 'RESTORE_VERIFY_READ_FAILED' });
+      return;
+    }
+    const restored = restoredRows?.[0];
+    const restoredBodyHash = typeof restored?.body === 'string'
+      ? createHash('sha256').update(restored.body, 'utf8').digest('hex')
+      : null;
+    if (restored?.id !== backup.id || restored.owner_id !== backup.owner_id
+        || restored.title !== backup.title || restoredBodyHash !== backup.bodySha256) {
+      response.status(500).json({ error: 'RESTORE_VERIFY_FAILED' });
+      return;
     }
     response.status(200).json({ restored: true });
   } catch {

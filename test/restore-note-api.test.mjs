@@ -49,7 +49,10 @@ function setEnvironment(testContext, overrides = {}) {
     ...overrides,
   };
   const previous = Object.fromEntries(Object.keys(values).map(key => [key, process.env[key]]));
-  Object.assign(process.env, values);
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
   testContext.after(() => {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];
@@ -58,9 +61,12 @@ function setEnvironment(testContext, overrides = {}) {
   });
 }
 
-function mockFetch(testContext, existingOwner = OWNER_ID) {
+function mockFetch(testContext, existingOwner = OWNER_ID, { mismatchReadback = false } = {}) {
   const requests = [];
   const previous = globalThis.fetch;
+  let stored = existingOwner
+    ? { id: NOTE_ID, owner_id: existingOwner, title: 'Tampered title', body: 'tampered body' }
+    : null;
   globalThis.fetch = async (input, options = {}) => {
     const url = new URL(input instanceof Request ? input.url : input);
     if (url.pathname === '/auth/v1/user') {
@@ -70,12 +76,21 @@ function mockFetch(testContext, existingOwner = OWNER_ID) {
     const method = options.method ?? 'GET';
     requests.push({ method, url, body: options.body });
     if (method === 'GET') {
-      return existingOwner
-        ? responseFor([{ id: NOTE_ID, owner_id: existingOwner }])
-        : responseFor([]);
+      const readCount = requests.filter(request => request.method === 'GET').length;
+      if (!stored) return responseFor([]);
+      if (mismatchReadback && readCount > 1) {
+        return responseFor([{ ...stored, body: 'unexpected readback' }]);
+      }
+      return responseFor([stored]);
     }
-    if (method === 'PATCH') return responseFor({ id: NOTE_ID }, 200);
-    if (method === 'POST') return responseFor([{ id: NOTE_ID }], 201);
+    if (method === 'PATCH') {
+      stored = { id: NOTE_ID, ...JSON.parse(options.body) };
+      return responseFor({ id: NOTE_ID }, 200);
+    }
+    if (method === 'POST') {
+      stored = JSON.parse(options.body);
+      return responseFor(null, 201);
+    }
     assert.fail(`unexpected database method: ${method}`);
   };
   testContext.after(() => {
@@ -91,21 +106,22 @@ async function invoke({ method = 'POST', headers = { authorization: 'Bearer test
   return response.result;
 }
 
-test('only the verified configured admin can restore the single matching note', async (t) => {
-  setEnvironment(t);
+test('verified admin restores and reads back the private backup copy', async (t) => {
+  setEnvironment(t, { RESTORE_NOTE_BACKUP_JSON: undefined });
   const requests = mockFetch(t);
   const result = await invoke();
 
   assert.equal(result.statusCode, 200);
   assert.deepEqual(result.body, { restored: true });
-  assert.deepEqual(requests.map(request => request.method), ['GET', 'PATCH']);
+  assert.deepEqual(requests.map(request => request.method), ['GET', 'PATCH', 'GET']);
   const update = requests[1];
   assert.equal(update.url.searchParams.get('id'), `eq.${NOTE_ID}`);
-  assert.equal(update.url.searchParams.get('owner_id'), `eq.${OWNER_ID}`);
   assert.deepEqual(JSON.parse(update.body), {
+    owner_id: OWNER_ID,
     title: '복구 연습 메모',
     body: BODY,
   });
+  assert.equal(requests[2].url.searchParams.get('id'), `eq.${NOTE_ID}`);
 });
 
 test('a deleted target is inserted without upserting over another owner', async (t) => {
@@ -114,7 +130,7 @@ test('a deleted target is inserted without upserting over another owner', async 
   const result = await invoke();
 
   assert.equal(result.statusCode, 200);
-  assert.deepEqual(requests.map(request => request.method), ['GET', 'POST']);
+  assert.deepEqual(requests.map(request => request.method), ['GET', 'POST', 'GET']);
   assert.deepEqual(JSON.parse(requests[1].body), {
     id: NOTE_ID,
     owner_id: OWNER_ID,
@@ -123,14 +139,14 @@ test('a deleted target is inserted without upserting over another owner', async 
   });
 });
 
-test('a target owned by someone else is never overwritten', async (t) => {
+test('a tampered owner field is restored only on the configured target ID', async (t) => {
   setEnvironment(t);
   const requests = mockFetch(t, '00000000-0000-4000-8000-000000000004');
   const result = await invoke();
 
-  assert.equal(result.statusCode, 409);
-  assert.deepEqual(result.body, { error: 'RESTORE_TARGET_OWNER_MISMATCH' });
-  assert.deepEqual(requests.map(request => request.method), ['GET']);
+  assert.equal(result.statusCode, 200);
+  assert.deepEqual(requests.map(request => request.method), ['GET', 'PATCH', 'GET']);
+  assert.equal(JSON.parse(requests[1].body).owner_id, OWNER_ID);
 });
 
 test('anonymous restore returns 401 before checking backup configuration', async (t) => {
@@ -179,4 +195,14 @@ test('non-admin and body-hash mismatch are rejected before writes', async (t) =>
   assert.equal(invalidBackup.statusCode, 503);
   assert.deepEqual(invalidBackup.body, { error: 'RESTORE_NOT_CONFIGURED' });
   assert.equal(requests.length, 0);
+});
+
+test('a mismatching database readback is not reported as restored', async (t) => {
+  setEnvironment(t);
+  const requests = mockFetch(t, OWNER_ID, { mismatchReadback: true });
+  const result = await invoke();
+
+  assert.equal(result.statusCode, 500);
+  assert.deepEqual(result.body, { error: 'RESTORE_VERIFY_FAILED' });
+  assert.deepEqual(requests.map(request => request.method), ['GET', 'PATCH', 'GET']);
 });

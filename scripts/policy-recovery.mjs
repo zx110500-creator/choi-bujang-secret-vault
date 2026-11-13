@@ -121,20 +121,11 @@ function verifyBackup() {
   process.stdout.write('DB 정책 SQL 백업 없음: 저장소에서 SQL/마이그레이션을 찾지 못했습니다.\n');
 }
 
-function restorePolicy() {
-  let backupTrusted = true;
-  try {
-    verifyBackup();
-  } catch (error) {
-    backupTrusted = false;
-    process.stdout.write(`검증되지 않은 사본은 사용하지 않습니다: ${error.message}\n`);
-    process.stdout.write(`고정된 기준 커밋 ${baselineCommit}의 Git 객체에서 복원합니다.\n`);
-  }
+function restorePolicy(apply) {
+  verifyBackup();
   const restored = new Map();
   for (const path of policyFiles) {
-    let contents = backupTrusted
-      ? readFileSync(join(backupRoot, path), 'utf8')
-      : baselineContents(path);
+    let contents = readFileSync(join(backupRoot, path), 'utf8');
     if (path === 'aleph.config.json') {
       const config = JSON.parse(contents);
       config.step = 10;
@@ -152,19 +143,22 @@ function restorePolicy() {
       path,
     ));
   }
-  if (!backupTrusted) writeBackupFromBaseline();
+  if (!apply) {
+    process.stdout.write('계획만 표시했습니다. 실제 운영 파일은 변경하지 않았습니다. 적용하려면 --apply를 추가하세요.\n');
+    return;
+  }
   for (const [path, contents] of restored) {
     writeFileSync(join(root, path), contents, 'utf8');
   }
-  process.stdout.write('검증된 정책 복원을 마쳤습니다. 10단계와 복구 경로 설정은 유지했습니다.\n');
+  process.stdout.write('검증된 사본으로 로컬 정책 파일을 복원했습니다. 배포된 운영 정책은 변경하지 않았습니다.\n');
 }
 
 const command = process.argv[2];
 try {
   if (command === 'create') createBackup();
   else if (command === 'verify') verifyBackup();
-  else if (command === 'restore') restorePolicy();
-  else throw new Error('usage: node scripts/policy-recovery.mjs <create|verify|restore>');
+  else if (command === 'restore') restorePolicy(process.argv.includes('--apply'));
+  else throw new Error('usage: node scripts/policy-recovery.mjs <create|verify|restore [--apply]>');
 } catch (error) {
   process.stderr.write(`정책 복구 첫 오류: ${error.message}\n`);
   process.exitCode = 1;
