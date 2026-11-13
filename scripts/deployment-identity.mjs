@@ -14,7 +14,9 @@ export function deploymentIdentity(env, config) {
       || !HOST.test(host || '')
       || !Number.isInteger(config?.step) || config.step < 2
       || typeof config.judgeIssuer !== 'string'
-      || !/^https:\/\/[a-z0-9-]+\.up\.railway\.app\/defense\/judge$/iu.test(config.judgeIssuer)) {
+      || !/^https:\/\/[a-z0-9-]+\.up\.railway\.app\/defense\/judge$/iu.test(config.judgeIssuer)
+      || !Array.isArray(config.allowedRoutes) || config.allowedRoutes.length === 0
+      || config.allowedRoutes.some(route => typeof route !== 'string' || !route.trim())) {
     throw new Error('배포 식별 정보를 확인할 수 없습니다. Vercel 시스템 환경변수와 방어전 단계 설정을 확인하세요.');
   }
   return {
@@ -24,5 +26,6 @@ export function deploymentIdentity(env, config) {
     commit: commit.toLowerCase(),
     publicAppUrl: `https://${host.toLowerCase()}`,
     judgeIssuer: config.judgeIssuer,
+    allowedRoutes: config.allowedRoutes,
   };
 }

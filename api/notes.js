@@ -7,6 +7,7 @@ function getVerifier() {
   if (!verifyLoginAuthorization) {
     verifyLoginAuthorization = createLoginVerifier({
       config,
+      supabaseUrl: process.env.SUPABASE_URL,
       supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
     });
   }
@@ -21,6 +22,13 @@ export default async function handler(request, response) {
     return;
   }
 
+  const authHeader =
+    request.headers?.authorization ?? request.headers?.Authorization ?? '';
+  if (!authHeader) {
+    response.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
   const supabaseUrl = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
   if (!supabaseUrl || !secretKey) {
@@ -29,8 +37,6 @@ export default async function handler(request, response) {
   }
 
   // 1. Authorization 헤더의 토큰을 src/verify-login.mjs로 검증
-  const authHeader =
-    request.headers?.authorization ?? request.headers?.Authorization ?? '';
   let verified = null;
   try {
     verified = await getVerifier()(authHeader);
@@ -41,7 +47,7 @@ export default async function handler(request, response) {
 
   // 2. 토큰이 없거나 유효하지 않으면 메모 없이 401 JSON 반환
   if (!verified?.userId) {
-    response.status(401).json({ error: 'UNAUTHORIZED' });
+    response.status(401).json({ error: 'Unauthorized' });
     return;
   }
 
