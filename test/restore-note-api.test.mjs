@@ -133,9 +133,23 @@ test('a target owned by someone else is never overwritten', async (t) => {
   assert.deepEqual(requests.map(request => request.method), ['GET']);
 });
 
+test('anonymous restore returns 401 before checking backup configuration', async (t) => {
+  setEnvironment(t, { RESTORE_NOTE_BACKUP_JSON: '' });
+  const previous = globalThis.fetch;
+  globalThis.fetch = async () => assert.fail('anonymous restore must not contact Supabase');
+  t.after(() => {
+    globalThis.fetch = previous;
+  });
+  const result = await invoke({ headers: {} });
+
+  assert.equal(result.statusCode, 401);
+  assert.deepEqual(result.body, { error: 'Unauthorized' });
+});
+
 test('non-admin and body-hash mismatch are rejected before writes', async (t) => {
   setEnvironment(t);
   const requests = mockFetch(t);
+  const previous = globalThis.fetch;
   globalThis.fetch = async (input, options = {}) => {
     const url = new URL(input instanceof Request ? input.url : input);
     if (url.pathname === '/auth/v1/user') {
@@ -143,11 +157,21 @@ test('non-admin and body-hash mismatch are rejected before writes', async (t) =>
     }
     assert.fail('a non-admin must not access the notes table');
   };
+  t.after(() => {
+    globalThis.fetch = previous;
+  });
   const nonAdmin = await invoke();
   assert.equal(nonAdmin.statusCode, 403);
   assert.deepEqual(nonAdmin.body, { error: 'RESTORE_ADMIN_REQUIRED' });
   assert.equal(requests.length, 0);
 
+  globalThis.fetch = async (input) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    if (url.pathname === '/auth/v1/user') {
+      return responseFor({ id: ADMIN_ID, aud: 'authenticated' });
+    }
+    assert.fail('invalid backup must not access the notes table');
+  };
   const badHash = JSON.parse(process.env.RESTORE_NOTE_BACKUP_JSON);
   badHash.bodySha256 = '0'.repeat(64);
   process.env.RESTORE_NOTE_BACKUP_JSON = JSON.stringify(badHash);

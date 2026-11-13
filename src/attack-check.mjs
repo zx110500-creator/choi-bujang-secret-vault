@@ -173,6 +173,19 @@ async function checkAnonymousApi(app) {
   ];
 }
 
+async function checkStageTen(app) {
+  const attempts = await checkAnonymousApi(app);
+  const restore = await sendNotesRequest(new URL('/api/admin/restore-note', app), {
+    method: 'POST',
+  });
+  attempts.push(result(
+    'anonymous_restore_note',
+    '비로그인 복구 요청은 성공하지 않음',
+    observedStatus(restore),
+  ));
+  return attempts;
+}
+
 export async function runAttackChecks(config) {
   const app = getAppUrl(config);
   if (config.step === 1) return checkStageOne(config, app);
@@ -180,5 +193,6 @@ export async function runAttackChecks(config) {
   if (config.step >= 5 && config.step <= 9) {
     return checkAnonymousApi(app);
   }
+  if (config.step === 10) return checkStageTen(app);
   throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
 }

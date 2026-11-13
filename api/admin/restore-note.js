@@ -24,10 +24,9 @@ function getBackup() {
   const raw = process.env.RESTORE_NOTE_BACKUP_JSON;
   const targetId = process.env.RESTORE_NOTE_ID;
   const ownerId = process.env.RESTORE_NOTE_OWNER_ID;
-  const adminId = process.env.RESTORE_ADMIN_USER_ID;
-  if (!raw || !targetId || !ownerId || !adminId) return null;
+  if (!raw || !targetId || !ownerId) return null;
   if (raw.length > 200000 || !NOTE_ID.test(targetId)
-      || !USER_ID.test(ownerId) || !USER_ID.test(adminId)) return null;
+      || !USER_ID.test(ownerId)) return null;
 
   let backup;
   try {
@@ -43,7 +42,7 @@ function getBackup() {
       || !/^[a-f0-9]{64}$/u.test(backup.bodySha256)) return null;
   const digest = createHash('sha256').update(backup.body, 'utf8').digest('hex');
   if (digest !== backup.bodySha256) return null;
-  return { backup, adminId };
+  return backup;
 }
 
 function hasUnexpectedRequestData(request) {
@@ -61,12 +60,6 @@ export default async function handler(request, response) {
   }
   if (hasUnexpectedRequestData(request)) {
     response.status(400).json({ error: 'RESTORE_REQUEST_MUST_BE_EMPTY' });
-    return;
-  }
-
-  const restore = getBackup();
-  if (!restore) {
-    response.status(503).json({ error: 'RESTORE_NOT_CONFIGURED' });
     return;
   }
 
@@ -97,8 +90,18 @@ export default async function handler(request, response) {
     response.status(401).json({ error: 'Unauthorized' });
     return;
   }
-  if (verified.userId !== restore.adminId) {
+  const adminId = process.env.RESTORE_ADMIN_USER_ID;
+  if (!adminId || !USER_ID.test(adminId)) {
+    response.status(503).json({ error: 'RESTORE_NOT_CONFIGURED' });
+    return;
+  }
+  if (verified.userId !== adminId) {
     response.status(403).json({ error: 'RESTORE_ADMIN_REQUIRED' });
+    return;
+  }
+  const backup = getBackup();
+  if (!backup) {
+    response.status(503).json({ error: 'RESTORE_NOT_CONFIGURED' });
     return;
   }
 
@@ -106,7 +109,6 @@ export default async function handler(request, response) {
     const supabase = createClient(supabaseUrl, secretKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const { backup } = restore;
     const { data: existingRows, error: readError } = await supabase
       .from('notes')
       .select('id, owner_id')
