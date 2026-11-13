@@ -8,7 +8,7 @@
 2. 방어전 1단계 카드의 **Deploy** 버튼을 누릅니다. Vercel에 GitHub로 로그인하고, 새 저장소가 **본인 계정의 Public 저장소**인지 확인한 뒤 Deploy를 누릅니다.
 3. 배포가 끝나면 화면에 나온 `https://…vercel.app` 주소를 방어전 1단계 카드에 붙여넣고 제출합니다. 저장소 주소나 설정 파일은 적지 않습니다.
 
-배포가 끝나면 `/`에서 자료실 화면을 볼 수 있습니다. 화면은 `/api/notes`에서 자료를 읽으며, 이 경로는 `aleph.config.json`의 `allowedRoutes`에 등록합니다. 메모 목록 API는 로그인 토큰을 확인하며, 토큰이 없는 GET 요청에는 로그인 페이지로 리다이렉트하지 않고 `401 {"error":"Unauthorized"}`를 반환합니다. `/data.json`은 공개 정적 자료로 제공하지 않습니다.
+배포가 끝나면 `/`에서 자료실 화면을 볼 수 있습니다. 브라우저는 같은 출처의 `/api/auth/login`, `/api/auth/session`, `/api/auth/logout`, `/api/notes`만 호출합니다. 로그인 토큰은 `HttpOnly`, `Secure`, `SameSite=Strict` 쿠키로 관리하며, Supabase URL·키와 Supabase 클라이언트는 브라우저 코드에 두지 않습니다. Vercel의 서버 환경 변수에 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SECRET_KEY`를 설정하고 값을 Git에 넣지 마세요. 메모 목록 API는 검증한 로그인 사용자만 조회하며, 세션이 없는 요청에는 `401 {"error":"Unauthorized"}`를 반환합니다. `/data.json`은 공개 정적 자료로 제공하지 않습니다.
 
 ## 시작 틀의 자동 처리
 
@@ -34,4 +34,4 @@ curl.exe -sS https://<현재-vercel-주소>/data.json
 curl.exe -sS https://<현재-vercel-주소>/api/notes
 ```
 
-`/data.json`은 404이거나 메모가 없어야 합니다. 로그인하지 않은 `/api/notes` GET 요청은 `401`과 `{"error":"Unauthorized"}`를 반환해야 합니다. 이전 공개 커밋·배포·캐시에 남은 자료는 현재 변경으로 삭제됐다고 가정하지 않습니다.
+`/data.json`은 404이거나 메모가 없어야 합니다. 로그인하지 않은 `/api/auth/session`과 `/api/notes` GET 요청은 `401`과 `{"error":"Unauthorized"}`를 반환해야 합니다. 이전 공개 커밋·배포·캐시에 남은 자료는 현재 변경으로 삭제됐다고 가정하지 않습니다.

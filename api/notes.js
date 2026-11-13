@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { createLoginVerifier } from '../src/verify-login.mjs';
+import { readSessionCookies } from '../src/auth-session.mjs';
 import config from '../aleph.config.json' with { type: 'json' };
 
 let verifyLoginAuthorization = null;
@@ -22,8 +23,10 @@ export default async function handler(request, response) {
     return;
   }
 
-  const authHeader =
-    request.headers?.authorization ?? request.headers?.Authorization ?? '';
+  const accessToken = readSessionCookies(request).accessToken;
+  const authHeader = accessToken
+    ? `Bearer ${accessToken}`
+    : request.headers?.authorization ?? request.headers?.Authorization ?? '';
   if (!authHeader) {
     response.status(401).json({ error: 'Unauthorized' });
     return;

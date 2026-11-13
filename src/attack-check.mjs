@@ -152,9 +152,31 @@ async function checkStageFour(app) {
   return attempts;
 }
 
+async function checkStageFive(app) {
+  const sessionUrl = new URL('/api/auth/session', app);
+  const notesUrl = new URL('/api/notes', app);
+  const [session, notes] = await Promise.all([
+    sendNotesRequest(sessionUrl),
+    sendNotesRequest(notesUrl),
+  ]);
+  return [
+    result(
+      'anonymous_session_check',
+      '로그인 없는 세션 확인은 HTTP 401 또는 403',
+      observedStatus(session),
+    ),
+    result(
+      'anonymous_note_list',
+      '로그인 없는 메모 조회는 HTTP 401 또는 403',
+      observedStatus(notes),
+    ),
+  ];
+}
+
 export async function runAttackChecks(config) {
   const app = getAppUrl(config);
   if (config.step === 1) return checkStageOne(config, app);
   if (config.step === 4) return checkStageFour(app);
+  if (config.step === 5) return checkStageFive(app);
   throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
 }
