@@ -38,6 +38,10 @@
 
 `npm run decider:test`로 정상 단건 메모, 거부 경로와 소유자 권한 사례를 확인하고 `npm run bundle`로 실제 비로그인 API 응답을 기록합니다. 로컬 판정 시험과 번들은 심판 결과가 아닙니다.
 
+## 9단계 폭주 조회 탐지 연습
+
+`npm run detect:test`는 사건의 `at`, `method`, `identity.sub`만 사용해 같은 사용자의 GET을 10분 창으로 셉니다. 120건까지는 `observe`, 121건부터는 정확히 `{ action: 'propose_revocation', reasonCode: 'burst_read', subject }`를 반환합니다. 비정렬 입력은 사용자별 시각순으로 정렬해 검사합니다. `npm run decider:test`와 `npm run bundle`도 실행해 기존 경로 판정과 제출 묶음을 확인합니다. 이 가상 사건 연습은 운영 사건 전달·회수 집행이나 심판 판정의 증거가 아닙니다.
+
 ## 2단계 자료 이전 확인 절차
 
 현재 배포의 `/` 화면과 `/api/notes` 서버 함수, `/data.json` 정적 경로를 별도로 확인합니다. 서버 함수는 `SUPABASE_URL`과 `SUPABASE_SECRET_KEY`를 서버 환경변수에서만 읽으며, 키를 코드·브라우저·응답·로그에 넣지 않습니다.

@@ -12,6 +12,13 @@ function reads(count, { intervalSeconds = 2, owner = subject, start = START } = 
   }));
 }
 
+function readsAt(offsets, { owner = subject, method = 'GET' } = {}) {
+  return offsets.map(offset => ({
+    at: new Date(START + offset).toISOString(),
+    method, identity: { sub: owner },
+  }));
+}
+
 const cases = [
   { name: '정상 조회 30건', events: reads(30), expected: { action: 'observe' } },
   { name: '10분 안에 120건', events: reads(120), expected: { action: 'observe' } },
@@ -24,6 +31,17 @@ const cases = [
   expected: { action: 'observe' } },
   { name: '10분 밖으로 흩어진 조회 200건', events: reads(200,
     { intervalSeconds: 7 }), expected: { action: 'observe' } },
+  { name: '정확히 600000ms 구간의 121건', events: readsAt(
+    Array.from({ length: 121 }, (_, index) => index * 5000)),
+  expected: { action: 'propose_revocation', reasonCode: 'burst_read', subject } },
+  { name: '600001ms 구간으로 흩어진 121건', events: readsAt([
+    ...Array.from({ length: 120 }, (_, index) => index * 5000), 600001,
+  ]), expected: { action: 'observe' } },
+  { name: '시간 역순으로 전달된 121건', events: reads(121).reverse(), expected: {
+    action: 'propose_revocation', reasonCode: 'burst_read', subject } },
+  { name: 'GET이 아닌 사건은 집계하지 않음', events: readsAt(
+    Array.from({ length: 121 }, (_, index) => index * 1000), { method: 'PATCH' }),
+  expected: { action: 'observe' } },
 ];
 
 // This is a practice contract, not a live engine assertion or judge score.
