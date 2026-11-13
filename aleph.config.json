@@ -1,5 +1,5 @@
 {
-  "step": 7,
+  "step": 8,
   "repoUrl": "https://github.com/zx110500-creator/choi-bujang-secret-vault",
   "publicAppUrl": "https://choi-bujang-secret-vault-tau-one.vercel.app",
   "judgeIssuer": "https://aleph-judge-production.up.railway.app/defense/judge",
@@ -9,7 +9,9 @@
     "audience": "authenticated"
   },
   "allowedRoutes": [
-    "GET /api/notes",
+    "GET /api/notes/:id",
+    "PATCH /api/notes/:id",
+    "DELETE /api/notes/:id",
     "POST /api/auth/login",
     "GET /api/auth/session",
     "POST /api/auth/logout"

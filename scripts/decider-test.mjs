@@ -69,6 +69,44 @@ export async function checkDecider({ decide, ruleIds }) {
       reasonCode: 'step_up_required',
     });
   }
+  if (ruleIds.includes('memo_item_route')) {
+    const requestFor = (overrides) => ({ ...normal, requestId: randomUUID(), ...overrides });
+    checks.push(
+      { name: 'ID가 있는 메모 단건 요청', request: requestFor({
+        path: '/notes/note-1', route: 'GET /notes/:id',
+      }), decision: 'allow' },
+      { name: 'ID 없는 메모 전체 목록', request: requestFor({
+        path: '/notes', route: 'GET /notes',
+      }), decision: 'deny', reasonCode: 'route_not_allowed' },
+      { name: '메모 export 기능 경로', request: requestFor({
+        path: '/notes/export', route: 'GET /notes/:id',
+      }), decision: 'deny', reasonCode: 'route_not_allowed' },
+      { name: '쿼리로 기능을 고르는 메모 요청', request: requestFor({
+        path: '/notes/note-1', route: 'GET /notes/:id', queryLength: 1,
+      }), decision: 'deny', reasonCode: 'route_not_allowed' },
+      { name: '메모 수정 요청', request: requestFor({
+        method: 'PATCH', path: '/notes/test-id', route: 'PATCH /notes/:id',
+      }), decision: 'allow' },
+      { name: '메모 삭제 요청', request: requestFor({
+        method: 'DELETE', path: '/notes/test-id', route: 'DELETE /notes/:id',
+      }), decision: 'allow' },
+      { name: '미등록 공지 구역', request: requestFor({
+        service: 'notices', path: '/notices', route: 'GET /notices',
+      }), decision: 'deny', reasonCode: 'route_not_allowed' },
+      { name: '강사 자료 구역', request: requestFor({
+        service: 'instructor_materials', path: '/materials/item-1',
+        route: 'GET /materials/:id',
+      }), decision: 'deny', reasonCode: 'route_not_allowed' },
+    );
+    checks.push({
+      name: '기존 인증 경로 유지',
+      request: requestFor({
+        method: 'POST', path: '/api/auth/login', route: 'POST /api/auth/login',
+        service: 'auth', deviceRegistered: false,
+      }),
+      decision: 'allow',
+    });
+  }
   const results = [];
   for (const item of checks) {
     const response = await decide(item.request);

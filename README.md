@@ -32,6 +32,12 @@
 
 `npm run decider:test`와 `npm run fixture:7`을 실행합니다. 등록 기기의 정상 가상 요청은 `allow`, 미등록 기기는 `deny`, 복합 이상 접속·지역 신호 단독·출처 불명 또는 누락 신호는 `step_up`과 `step_up_required`가 되어야 합니다. 계약의 `stepUp`이 15분 이내에 확인된 이상 접속은 `allow`가 됩니다. 이들은 가상 연습이며 실제 심판 판정이나 운영 접속 기록이 아닙니다.
 
+## 8단계 자료 구역과 메모 소유권
+
+메모는 `GET /api/notes/:id`, `PATCH /api/notes/:id`, `DELETE /api/notes/:id` 단건 경로만 판정기가 허용합니다. 메모 목록·`export`·쿼리 선택은 거부합니다. `/api/notes/:id` 서버 함수는 검증한 로그인 사용자 ID와 DB의 `owner_id`를 대조합니다. 현재 저장소에는 공지·강사 자료 API나 권한 스키마가 없어 해당 구역은 정의되기 전까지 거부되며, 요청 본문·헤더의 역할값은 권한 판정에 쓰지 않습니다.
+
+`npm run decider:test`로 정상 단건 메모, 거부 경로와 소유자 권한 사례를 확인하고 `npm run bundle`로 실제 비로그인 API 응답을 기록합니다. 로컬 판정 시험과 번들은 심판 결과가 아닙니다.
+
 ## 2단계 자료 이전 확인 절차
 
 현재 배포의 `/` 화면과 `/api/notes` 서버 함수, `/data.json` 정적 경로를 별도로 확인합니다. 서버 함수는 `SUPABASE_URL`과 `SUPABASE_SECRET_KEY`를 서버 환경변수에서만 읽으며, 키를 코드·브라우저·응답·로그에 넣지 않습니다.
