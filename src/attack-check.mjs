@@ -152,7 +152,7 @@ async function checkStageFour(app) {
   return attempts;
 }
 
-async function checkStageFive(app) {
+async function checkAnonymousApi(app) {
   const sessionUrl = new URL('/api/auth/session', app);
   const notesUrl = new URL('/api/notes', app);
   const [session, notes] = await Promise.all([
@@ -177,6 +177,6 @@ export async function runAttackChecks(config) {
   const app = getAppUrl(config);
   if (config.step === 1) return checkStageOne(config, app);
   if (config.step === 4) return checkStageFour(app);
-  if (config.step === 5) return checkStageFive(app);
+  if (config.step === 5 || config.step === 6) return checkAnonymousApi(app);
   throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
 }
