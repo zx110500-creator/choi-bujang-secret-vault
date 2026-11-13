@@ -1,4 +1,5 @@
 artifacts/
+backups/private/
 bundle-notes.json
 .env
 .env.*

@@ -1,0 +1,21 @@
+{
+  "step": 9,
+  "repoUrl": "https://github.com/zx110500-creator/choi-bujang-secret-vault",
+  "publicAppUrl": "https://choi-bujang-secret-vault-tau-one.vercel.app",
+  "judgeIssuer": "https://aleph-judge-production.up.railway.app/defense/judge",
+  "identityProvider": {
+    "issuer": "https://opgtqcxrirndpydbmwjv.supabase.co/auth/v1",
+    "jwksUrl": "https://opgtqcxrirndpydbmwjv.supabase.co/auth/v1/.well-known/jwks.json",
+    "audience": "authenticated"
+  },
+  "allowedRoutes": [
+    "GET /api/notes/:id",
+    "PATCH /api/notes/:id",
+    "DELETE /api/notes/:id",
+    "POST /api/auth/login",
+    "GET /api/auth/session",
+    "POST /api/auth/logout"
+  ],
+  "originalApiUrl": "https://opgtqcxrirndpydbmwjv.supabase.co/rest/v1/notes",
+  "restoreRoute": null
+}

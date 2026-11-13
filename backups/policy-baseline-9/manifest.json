@@ -1,0 +1,10 @@
+{
+  "schema": "aleph.policy-backup.v1",
+  "baselineCommit": "068d193d049ee6c1b299d98c75d2513fe5982f96",
+  "files": {
+    "src/decider.mjs": "b2fb73ddbf010510a47f495d31e7c15ac9a9b3eb94bf82dcf41096a17ae7ab5f",
+    "aleph.config.json": "8ea74f8ca4a71a946a459e6800c605041b1fd0c77bbb93f2898db2f2bcd60824"
+  },
+  "databasePolicyStatus": "not_present_in_repository",
+  "databasePolicyFiles": []
+}

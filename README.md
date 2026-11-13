@@ -42,6 +42,14 @@
 
 `npm run detect:test`는 사건의 `at`, `method`, `identity.sub`만 사용해 같은 사용자의 GET을 10분 창으로 셉니다. 120건까지는 `observe`, 121건부터는 정확히 `{ action: 'propose_revocation', reasonCode: 'burst_read', subject }`를 반환합니다. 비정렬 입력은 사용자별 시각순으로 정렬해 검사합니다. `npm run decider:test`와 `npm run bundle`도 실행해 기존 경로 판정과 제출 묶음을 확인합니다. 이 가상 사건 연습은 운영 사건 전달·회수 집행이나 심판 판정의 증거가 아닙니다.
 
+## 10단계 검증된 백업과 단일 메모 복원
+
+정책 백업은 푸시된 9단계 커밋 `068d193d049ee6c1b299d98c75d2513fe5982f96`의 `src/decider.mjs`와 `aleph.config.json`을 SHA-256으로 고정합니다. `npm run policy:backup`은 기준 사본과 매니페스트를 만들고, `npm run policy:verify`는 사본·해시를 기준 커밋과 대조합니다. 검증 명령은 백업이 없거나 해시가 다르면 실패하고 기준본과의 diff를 출력합니다. `npm run policy:restore`도 diff를 먼저 출력하며, 사본이 변조됐으면 그 사본을 쓰지 않고 고정된 Git 기준본으로 복원·재생성합니다. 복원 후 `step: 10`과 `/api/admin/restore-note` 설정은 유지됩니다. 저장소에는 DB 권한 SQL이나 마이그레이션이 없어 DB 정책은 백업되지 않았습니다.
+
+`POST /api/admin/restore-note`는 `notes` 서비스의 한 번에 한 개로 고정된 서버 설정 대상만 처리합니다. 로컬 가상 시험 대상은 `note-restore-b`이며, 서버에서 검증된 Supabase 로그인 사용자 ID가 Vercel의 `RESTORE_ADMIN_USER_ID`와 일치할 때만 동작합니다. 실제 배포 복원 사본은 `RESTORE_NOTE_BACKUP_JSON` 서버 환경변수에 비밀 입력으로 설정하며, JSON에는 `id`, `owner_id`, `title`, `body`, `bodySha256`가 필요합니다. `RESTORE_NOTE_ID`와 `RESTORE_NOTE_OWNER_ID`도 같은 사본의 ID·소유자와 일치해야 합니다. 본문 SHA-256이 다르거나 대상 ID가 다른 소유자에게 속하면 거부합니다. 이 경로는 한 메모만 삽입하거나 동일 소유자의 행만 갱신하며 감사 테이블을 수정하지 않습니다. `backups/private/restore-note-b.json`은 로컬 전용 가상 시험 계정 B 사본이며 `.gitignore` 대상입니다. 실제 시험 계정 B의 ID·메모는 이 저장소에 없고, 이 가상 사본은 운영 DB 자료가 아니므로 실제 배포 복구 사본으로 설정하지 마세요. 실제 ID·본문·환경변수 값은 코드·Git·채팅에 넣지 마세요.
+
+복원 경로 시험은 `npm run test:restore`로 실행합니다. 복구 후 확인 순서는 `npm run policy:verify`, `npm run decider:test`, `npm run detect:test`, `npm run test:restore`이며, 정상 메모 접근과 목록·타인 소유 메모·비관리자 복원 거부는 별도로 확인합니다. 이 로컬 시험은 실제 DB 복구·운영 권한 회수·심판 판정 증거가 아닙니다.
+
 ## 2단계 자료 이전 확인 절차
 
 현재 배포의 `/` 화면과 `/api/notes` 서버 함수, `/data.json` 정적 경로를 별도로 확인합니다. 서버 함수는 `SUPABASE_URL`과 `SUPABASE_SECRET_KEY`를 서버 환경변수에서만 읽으며, 키를 코드·브라우저·응답·로그에 넣지 않습니다.
