@@ -23,6 +23,9 @@ test('unauthenticated GET returns a 401 JSON error without redirecting', async (
 
 test('authenticated list ignores client-supplied owners and filters by verified user ID', async (testContext) => {
   const userId = '00000000-0000-4000-8000-000000000001';
+  const deviceId = '0123456789abcdef0123456789abcdef';
+  let approvalStatus = 'approved';
+  let notesReads = 0;
   const previousEnvironment = {
     SUPABASE_URL: process.env.SUPABASE_URL,
     SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
@@ -37,7 +40,15 @@ test('authenticated list ignores client-supplied owners and filters by verified 
         status: 200, headers: { 'content-type': 'application/json' },
       });
     }
+    if (url.pathname === '/rest/v1/device_approvals') {
+      assert.equal(url.searchParams.get('owner_id'), `eq.${userId}`);
+      assert.equal(url.searchParams.get('device_id'), `eq.${deviceId}`);
+      return new Response(JSON.stringify([{ status: approvalStatus }]), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    }
     assert.equal(url.pathname, '/rest/v1/notes');
+    notesReads += 1;
     assert.equal(url.searchParams.get('owner_id'), `eq.${userId}`);
     return new Response(JSON.stringify([
       { id: 'note-1', title: 'Mine', body: 'Private' },
@@ -67,6 +78,7 @@ test('authenticated list ignores client-supplied owners and filters by verified 
     url: '/api/notes?userId=other&owner_id=other',
     headers: {
       authorization: 'Bearer x',
+      cookie: `__Host-aleph-device=${deviceId}`,
       userId: 'other',
       owner_id: 'other',
     },
@@ -76,4 +88,28 @@ test('authenticated list ignores client-supplied owners and filters by verified 
   assert.deepEqual(result.body, {
     notes: [{ id: 'note-1', title: 'Mine', body: 'Private' }],
   });
+
+  approvalStatus = 'pending';
+  const denied = { statusCode: null, body: null };
+  const deniedResponse = {
+    setHeader() {},
+    status(statusCode) {
+      denied.statusCode = statusCode;
+      return this;
+    },
+    json(body) {
+      denied.body = body;
+    },
+  };
+  await handler({
+    method: 'GET',
+    headers: {
+      authorization: 'Bearer x',
+      cookie: `__Host-aleph-device=${deviceId}`,
+    },
+  }, deniedResponse);
+
+  assert.equal(denied.statusCode, 403);
+  assert.deepEqual(denied.body, { error: 'DEVICE_NOT_APPROVED', status: 'pending' });
+  assert.equal(notesReads, 1);
 });

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { createLoginVerifier } from '../src/verify-login.mjs';
 import { readSessionCookies } from '../src/auth-session.mjs';
+import { getDeviceApprovalStatus, getDeviceId } from '../src/device-approval.mjs';
 import config from '../aleph.config.json' with { type: 'json' };
 
 let verifyLoginAuthorization = null;
@@ -51,6 +52,24 @@ export default async function handler(request, response) {
   // 2. 토큰이 없거나 유효하지 않으면 메모 없이 401 JSON 반환
   if (!verified?.userId) {
     response.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  let approvalStatus;
+  try {
+    approvalStatus = await getDeviceApprovalStatus(
+      verified.userId,
+      getDeviceId(request, response),
+    );
+  } catch (error) {
+    const code = error instanceof TypeError && error.message === 'supabase_not_configured'
+      ? 'SUPABASE_NOT_CONFIGURED'
+      : 'DEVICE_APPROVAL_CHECK_FAILED';
+    response.status(code === 'SUPABASE_NOT_CONFIGURED' ? 500 : 502).json({ error: code });
+    return;
+  }
+  if (approvalStatus !== 'approved') {
+    response.status(403).json({ error: 'DEVICE_NOT_APPROVED', status: approvalStatus });
     return;
   }
 
