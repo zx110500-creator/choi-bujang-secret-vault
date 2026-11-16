@@ -18,7 +18,13 @@ export function assertNoSupabaseCredentialsInPublic(publicDirectory) {
   const root = resolve(publicDirectory);
   for (const publicFile of PUBLIC_FILES) {
     const path = resolve(root, publicFile);
-    const content = readFileSync(path, 'utf8');
+    let content;
+    try {
+      content = readFileSync(path, 'utf8');
+    } catch (error) {
+      if (publicFile === 'aleph.json' && error?.code === 'ENOENT') continue;
+      throw error;
+    }
     if (SUPABASE_URL.test(content) || SUPABASE_PUBLIC_KEY.test(content)
         || JWT.test(content) || SUPABASE_SDK.test(content)
         || SUPABASE_URL_VARIABLE.test(content)) {
