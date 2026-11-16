@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 const PUBLIC_FILES = Object.freeze([
   'index.html',
@@ -22,7 +22,7 @@ export function assertNoSupabaseCredentialsInPublic(publicDirectory) {
     if (SUPABASE_URL.test(content) || SUPABASE_PUBLIC_KEY.test(content)
         || JWT.test(content) || SUPABASE_SDK.test(content)
         || SUPABASE_URL_VARIABLE.test(content)) {
-      throw new Error(`브라우저 공개 파일에 Supabase 주소·키·클라이언트가 있습니다: ${relative(root, path)}`);
+      throw new Error(`브라우저 공개 파일에 Supabase 주소·키·클라이언트가 있습니다: ${publicFile}`);
     }
   }
 }
