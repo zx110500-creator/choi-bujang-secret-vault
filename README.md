@@ -82,7 +82,7 @@ curl.exe -sS https://<현재-vercel-주소>/api/notes
 
 ## 11~12단계 자료실·탈환 작전실
 
-아래 설치·실행·중지·복구 안내의 검사 기준 커밋은 `ab62ddaabdffeb3e12d7dca1fd647e84e4594b69`입니다. 이 커밋의 공개 자산 검사는 `node:fs`의 `readdirSync`와 `readFileSync`를 사용합니다.
+아래 설치·실행·중지·복구 안내의 검사 기준 커밋은 `890d918bd6635faf2fad89ec7b867a599083f09e`입니다. 이 커밋의 공개 자산 검사는 `node:fs`의 `readdirSync`와 `readFileSync`를 사용합니다.
 
 11단계 저장 커밋 `c41fff2`에서 승인 요청·상태 조회와 HttpOnly 기기 쿠키를 추가했습니다. 이 작업 트리에서는 자료 목록·단건 API와 관리자 복구 경로가 승인 상태가 `approved`일 때만 진행됩니다. 새 기기 승인 테이블은 `supabase/migrations/20261116000000_device_approvals.sql`을 적용해야 동작합니다.
 
