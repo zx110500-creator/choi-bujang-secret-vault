@@ -20,6 +20,17 @@
     button { width: fit-content; color: #ecf4ff; background: #245c72; cursor: pointer; }
     #status { min-height: 1.5em; }
     #offline-status { color: #ffd28a; }
+    #ops-room { margin-top: 30px; border: 1px solid #51667c; border-radius: 14px; padding: 18px; }
+    #ops-room h2 { margin-top: 0; }
+    .ops-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+    .ops-card { border: 1px solid #51667c; border-radius: 10px; padding: 12px; }
+    .ops-card dt { color: #8ad8df; font-weight: 700; }
+    .ops-card dd { margin: 6px 0 0; overflow-wrap: anywhere; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; min-width: 760px; border-collapse: collapse; margin-top: 14px; }
+    th, td { border: 1px solid #51667c; padding: 8px; text-align: left; vertical-align: top; }
+    th { background: #1a2a3d; }
+    code { overflow-wrap: anywhere; }
     ul { list-style: none; display: grid; gap: 12px; padding: 0; }
     li { border: 1px solid #51667c; border-radius: 14px; padding: 17px 19px; background: #1a2a3d; }
     strong { display: block; font-size: 18px; margin-bottom: 5px; }
@@ -50,6 +61,50 @@
       <h2 id="notes-heading">내 자료</h2>
       <ul id="notes" aria-live="polite"></ul>
     </section>
+    <section id="ops-room" aria-labelledby="ops-heading" hidden>
+      <h2 id="ops-heading">탈환 작전실</h2>
+      <p id="ops-status" role="status" aria-live="polite">실제 서버 응답을 기다리는 중입니다.</p>
+      <div class="ops-grid">
+        <div class="ops-card">
+          <h3>판정기 규칙</h3>
+          <p id="rule-status">미조회</p>
+          <ul id="rule-list"><li>미조회</li></ul>
+        </div>
+        <div class="ops-card">
+          <h3>탐지 사건 요약</h3>
+          <p id="detection-status">미조회</p>
+          <ul id="event-list"><li>미조회</li></ul>
+        </div>
+        <div class="ops-card">
+          <h3>회수 상태</h3>
+          <p id="revocation-status">미조회</p>
+        </div>
+        <div class="ops-card">
+          <h3>복구 버전</h3>
+          <p id="restore-status">미조회</p>
+        </div>
+      </div>
+      <button id="refresh-ops-button" type="button">작전실 새로 조회</button>
+      <h3>1~11단계 안전 실측</h3>
+      <p>본문·비밀값은 표에 기록하지 않습니다. 타인 메모, 실제 수정, 복구 작업은 자동 실행하지 않습니다.</p>
+      <button id="run-verification-button" type="button">안전한 API 실측 실행</button>
+      <p id="full-suite-status">41종 전체 공격 시험: 미실행(서버 심판 판정 대기)</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">구분(단계/유형)</th>
+              <th scope="col">요청 내용</th>
+              <th scope="col">기대 결과</th>
+              <th scope="col">실제 API 결과(상태코드/판정)</th>
+              <th scope="col">요청 ID(requestId)</th>
+              <th scope="col">확인 시각</th>
+            </tr>
+          </thead>
+          <tbody id="verification-results"></tbody>
+        </table>
+      </div>
+    </section>
   </main>
   <script type="module">
     const form = document.querySelector('#login-form');
@@ -62,6 +117,246 @@
     const list = document.querySelector('#notes');
     const status = document.querySelector('#status');
     const offlineStatus = document.querySelector('#offline-status');
+    const opsRoom = document.querySelector('#ops-room');
+    const opsStatus = document.querySelector('#ops-status');
+    const ruleStatus = document.querySelector('#rule-status');
+    const ruleList = document.querySelector('#rule-list');
+    const detectionStatus = document.querySelector('#detection-status');
+    const eventList = document.querySelector('#event-list');
+    const revocationStatus = document.querySelector('#revocation-status');
+    const restoreStatus = document.querySelector('#restore-status');
+    const verificationResults = document.querySelector('#verification-results');
+    const refreshOpsButton = document.querySelector('#refresh-ops-button');
+    const runVerificationButton = document.querySelector('#run-verification-button');
+
+    const verificationPlan = [
+      {
+        id: 'anonymous-list',
+        category: '1~11 / 거부',
+        request: '쿠키 없이 GET /api/notes',
+        expected: '401',
+        initial: '미실행',
+      },
+      {
+        id: 'approved-list',
+        category: '8·11 / 정상',
+        request: '현재 로그인 기기로 GET /api/notes',
+        expected: '200 (승인 기기)',
+        initial: '미실행',
+      },
+      {
+        id: 'anonymous-item',
+        category: '8 / 거부',
+        request: '쿠키 없이 GET /api/notes/ops-probe',
+        expected: '401',
+        initial: '미실행',
+      },
+      {
+        id: 'outside-query',
+        category: '8 / 구역 밖',
+        request: 'GET /api/notes/ops-probe?scope=outside',
+        expected: '403',
+        initial: '미실행',
+      },
+      {
+        id: 'device-status',
+        category: '11 / 승인 상태',
+        request: '현재 기기 GET /api/device-approval',
+        expected: '200 + 서버 상태',
+        initial: '미실행',
+      },
+      {
+        id: 'revoked-device',
+        category: '11 / 회수',
+        request: '회수된 기기로 GET /api/notes/ops-probe',
+        expected: '403',
+        initial: '미실행(실제 회수 상태일 때만 실행)',
+      },
+      {
+        id: 'revoked-identity',
+        category: '11 / 회수 신원',
+        request: '회수된 신원 세션 재사용',
+        expected: '401',
+        initial: '미실행(신원 회수 API 미연결)',
+      },
+      {
+        id: 'foreign-note',
+        category: '8 / 타인 메모',
+        request: '타인 소유 메모 단건 GET',
+        expected: '403',
+        initial: '미실행(안전한 타인 시험 ID 없음)',
+      },
+      {
+        id: 'unregistered-device',
+        category: '6·11 / 미등록 기기',
+        request: '별도 미등록 기기로 GET /api/notes',
+        expected: '403',
+        initial: '미실행(격리 브라우저 필요)',
+      },
+      {
+        id: 'unsigned-update',
+        category: '8·10 / 서명 없는 수정',
+        request: 'PATCH 서명 검증',
+        expected: '서명 규약 미정',
+        initial: '미실행(기존 수정 기능 보존)',
+      },
+      {
+        id: 'detection-events',
+        category: '9 / 탐지',
+        request: '운영 탐지 사건 API 조회',
+        expected: '실제 사건 요약',
+        initial: '미실행(운영 사건 API 미연결)',
+      },
+      {
+        id: 'restore-version',
+        category: '10 / 복구',
+        request: '복구 이력/버전 API 조회',
+        expected: '실제 복구 버전',
+        initial: '미실행(복구 이력 API 없음)',
+      },
+    ];
+
+    function renderVerificationPlan() {
+      verificationResults.replaceChildren(...verificationPlan.map(item => {
+        const row = document.createElement('tr');
+        row.dataset.checkId = item.id;
+        const values = [
+          item.category,
+          item.request,
+          item.expected,
+          item.initial,
+          '—',
+          '—',
+        ];
+        row.append(...values.map(value => {
+          const cell = document.createElement('td');
+          cell.textContent = value;
+          return cell;
+        }));
+        return row;
+      }));
+    }
+
+    function updateVerificationResult(id, { actual, requestId, checkedAt }) {
+      const row = [...verificationResults.querySelectorAll('tr')]
+        .find(item => item.dataset.checkId === id);
+      if (!row) return;
+      row.cells[3].textContent = actual;
+      row.cells[4].textContent = requestId || 'API에서 제공하지 않음';
+      row.cells[5].textContent = checkedAt || '—';
+    }
+
+    function renderOpsOverview(data) {
+      const rules = data?.rules;
+      const ids = Array.isArray(rules?.ids) ? rules.ids : [];
+      ruleStatus.textContent = rules?.enforcement === 'not_wired_to_app_api'
+        ? '규칙 등록 확인 · 앱 API 집행 미연결'
+        : '서버 응답에서 상태를 확인할 수 없음';
+      ruleList.replaceChildren(...ids.map(id => {
+        const item = document.createElement('li');
+        item.textContent = `${id} · API 집행 미연결`;
+        return item;
+      }));
+      if (!ids.length) ruleList.replaceChildren();
+
+      const detection = data?.detection;
+      const events = Array.isArray(detection?.events) ? detection.events : [];
+      detectionStatus.textContent = detection?.status === 'not_connected'
+        ? '미연결 · 운영 사건 출처 없음'
+        : `서버 상태: ${detection?.status ?? '알 수 없음'}`;
+      eventList.replaceChildren(...events.map(event => {
+        const item = document.createElement('li');
+        const fields = [
+          typeof event.at === 'string' ? event.at : '',
+          typeof event.kind === 'string' && /^[a-z0-9._-]{1,64}$/iu.test(event.kind)
+            ? event.kind : '',
+          ['GET', 'POST', 'PATCH', 'DELETE'].includes(event.method) ? event.method : '',
+          Number.isInteger(event.status) ? String(event.status) : '',
+        ].filter(Boolean);
+        item.textContent = `${fields.join(' · ')} · 본문 ***`;
+        return item;
+      }));
+      if (!events.length) {
+        const item = document.createElement('li');
+        item.textContent = '사건 기록 없음/연결 안 됨 · 본문 ***';
+        eventList.replaceChildren(item);
+      }
+
+      const revocation = data?.revocation;
+      revocationStatus.textContent = revocation
+        ? `현재 기기 ${revocation.status} · 신원 회수 ${revocation.identityRevocation}`
+        : '서버 응답에서 회수 상태를 확인할 수 없음';
+      const restore = data?.restore;
+      restoreStatus.textContent = restore?.version
+        ? `서버 버전 ${restore.version}`
+        : `미기록 · ${restore?.status ?? '서버 응답 없음'}`;
+    }
+
+    async function refreshOpsOverview() {
+      opsStatus.textContent = '작전실 서버 응답을 조회하는 중입니다.';
+      try {
+        const overview = await request('/api/ops/overview');
+        renderOpsOverview(overview);
+        opsStatus.textContent = `서버 응답 확인 · requestId ${overview.requestId ?? '미제공'}`;
+      } catch (error) {
+        opsStatus.textContent = `작전실 조회 실패 · HTTP ${error.status ?? '오류'}`;
+      }
+    }
+
+    async function runSafeVerification() {
+      runVerificationButton.disabled = true;
+      runVerificationButton.textContent = '실측 중…';
+      renderVerificationPlan();
+      const probe = async (id, url, credentials, expectedStatus, readApproval = false) => {
+        try {
+          const response = await fetch(url, {
+            method: 'GET',
+            cache: 'no-store',
+            credentials,
+          });
+          const checkedAt = new Date().toISOString();
+          let detail = '';
+          let approvalStatusValue = null;
+          if (readApproval && response.ok) {
+            const result = await response.json();
+            if (typeof result?.status === 'string') {
+              approvalStatusValue = result.status;
+              detail = ` · ${approvalStatusValue}`;
+            }
+          }
+          const match = response.status === expectedStatus;
+          updateVerificationResult(id, {
+            actual: `HTTP ${response.status}${detail} · ${match ? '기대와 일치' : `기대 HTTP ${expectedStatus}`}`,
+            requestId: response.headers.get('x-request-id'),
+            checkedAt,
+          });
+          return { response, approvalStatusValue };
+        } catch {
+          updateVerificationResult(id, {
+            actual: '네트워크 오류 · 결과 미확인',
+            requestId: '—',
+            checkedAt: new Date().toISOString(),
+          });
+          return null;
+        }
+      };
+
+      try {
+        await probe('anonymous-list', '/api/notes', 'omit', 401);
+        await probe('anonymous-item', '/api/notes/ops-probe', 'omit', 401);
+        await probe('outside-query', '/api/notes/ops-probe?scope=outside', 'omit', 403);
+        const approvalProbe = await probe(
+          'device-status', '/api/device-approval', 'same-origin', 200, true,
+        );
+        if (approvalProbe?.approvalStatusValue === 'revoked') {
+          await probe('revoked-device', '/api/notes/ops-probe', 'same-origin', 403);
+        }
+        await probe('approved-list', '/api/notes', 'same-origin', 200);
+      } finally {
+        runVerificationButton.disabled = false;
+        runVerificationButton.textContent = '안전한 API 실측 실행';
+      }
+    }
 
     async function request(url, options = {}) {
       const response = await fetch(url, {
@@ -114,11 +409,15 @@
     async function checkSession() {
       closeProtectedContent();
       approvalButton.hidden = true;
+      let authenticated = false;
       try {
         const session = await request('/api/auth/session');
         if (session?.authenticated !== true) throw new Error('세션을 확인할 수 없습니다.');
+        authenticated = true;
         form.hidden = true;
         logoutButton.hidden = false;
+        opsRoom.hidden = false;
+        await refreshOpsOverview();
         const approval = await request('/api/device-approval');
         if (approval?.status !== 'approved') {
           approvalButton.hidden = approval?.status !== 'not_requested';
@@ -132,13 +431,16 @@
         await loadNotes();
         status.textContent = '로그인 및 기기 승인이 확인되었습니다.';
       } catch (error) {
-        form.hidden = false;
-        logoutButton.hidden = true;
+        form.hidden = authenticated;
+        logoutButton.hidden = !authenticated;
         approvalButton.hidden = true;
+        opsRoom.hidden = !authenticated;
         closeProtectedContent();
         status.textContent = error.status === 401
           ? '로그인해 주세요.'
-          : '로그인 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+          : error.status === 403
+            ? '기기 승인이 없어 자료 요청이 거부되었습니다.'
+            : '로그인 또는 서버 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.';
       }
     }
 
@@ -202,10 +504,13 @@
     function updateOfflineStatus() {
       offlineStatus.hidden = navigator.onLine;
     }
+    renderVerificationPlan();
     window.addEventListener('online', updateOfflineStatus);
     window.addEventListener('offline', updateOfflineStatus);
     updateOfflineStatus();
 
+    refreshOpsButton.addEventListener('click', refreshOpsOverview);
+    runVerificationButton.addEventListener('click', runSafeVerification);
     await checkSession();
   </script>
 </body>

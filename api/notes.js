@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createLoginVerifier } from '../src/verify-login.mjs';
 import { readSessionCookies } from '../src/auth-session.mjs';
 import { getDeviceApprovalStatus, getDeviceId } from '../src/device-approval.mjs';
+import { setRequestId } from '../src/request-id.mjs';
 import config from '../aleph.config.json' with { type: 'json' };
 
 let verifyLoginAuthorization = null;
@@ -18,6 +19,7 @@ function getVerifier() {
 
 export default async function handler(request, response) {
   response.setHeader('Cache-Control', 'no-store');
+  setRequestId(response);
 
   if (request.method !== 'GET') {
     response.status(405).json({ error: 'METHOD_NOT_ALLOWED' });

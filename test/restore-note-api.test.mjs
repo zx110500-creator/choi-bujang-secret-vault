@@ -61,7 +61,10 @@ function setEnvironment(testContext, overrides = {}) {
   });
 }
 
-function mockFetch(testContext, existingOwner = OWNER_ID, { mismatchReadback = false } = {}) {
+function mockFetch(testContext, existingOwner = OWNER_ID, {
+  mismatchReadback = false,
+  approvalStatus = 'approved',
+} = {}) {
   const requests = [];
   const previous = globalThis.fetch;
   let stored = existingOwner
@@ -71,6 +74,9 @@ function mockFetch(testContext, existingOwner = OWNER_ID, { mismatchReadback = f
     const url = new URL(input instanceof Request ? input.url : input);
     if (url.pathname === '/auth/v1/user') {
       return responseFor({ id: ADMIN_ID, aud: 'authenticated' });
+    }
+    if (url.pathname === '/rest/v1/device_approvals') {
+      return responseFor([{ status: approvalStatus }]);
     }
     assert.equal(url.pathname, '/rest/v1/notes');
     const method = options.method ?? 'GET';
@@ -101,6 +107,7 @@ function mockFetch(testContext, existingOwner = OWNER_ID, { mismatchReadback = f
 
 async function invoke({ method = 'POST', headers = { authorization: 'Bearer test-token' },
   url = '/api/admin/restore-note', body } = {}) {
+  headers.cookie = `${headers.cookie ? `${headers.cookie}; ` : ''}__Host-aleph-device=0123456789abcdef0123456789abcdef`;
   const response = createResponse();
   await handler({ method, headers, url, body }, response);
   return response.result;
@@ -186,6 +193,9 @@ test('non-admin and body-hash mismatch are rejected before writes', async (t) =>
     if (url.pathname === '/auth/v1/user') {
       return responseFor({ id: ADMIN_ID, aud: 'authenticated' });
     }
+    if (url.pathname === '/rest/v1/device_approvals') {
+      return responseFor([{ status: 'approved' }]);
+    }
     assert.fail('invalid backup must not access the notes table');
   };
   const badHash = JSON.parse(process.env.RESTORE_NOTE_BACKUP_JSON);
@@ -205,4 +215,14 @@ test('a mismatching database readback is not reported as restored', async (t) =>
   assert.equal(result.statusCode, 500);
   assert.deepEqual(result.body, { error: 'RESTORE_VERIFY_FAILED' });
   assert.deepEqual(requests.map(request => request.method), ['GET', 'PATCH', 'GET']);
+});
+
+test('a revoked device cannot invoke restore or read the target', async (t) => {
+  setEnvironment(t);
+  const requests = mockFetch(t, OWNER_ID, { approvalStatus: 'revoked' });
+  const result = await invoke();
+
+  assert.equal(result.statusCode, 403);
+  assert.deepEqual(result.body, { error: 'DEVICE_NOT_APPROVED', status: 'revoked' });
+  assert.deepEqual(requests, []);
 });

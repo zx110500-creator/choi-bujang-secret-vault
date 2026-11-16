@@ -3,8 +3,10 @@ import { test } from 'node:test';
 import handler from '../api/notes/[id].js';
 
 const USER_ID = '00000000-0000-4000-8000-000000000001';
+const DEVICE_ID = '0123456789abcdef0123456789abcdef';
 const state = {
   ownerId: USER_ID,
+  approvalStatus: 'approved',
   databaseRequests: [],
 };
 
@@ -43,6 +45,9 @@ globalThis.fetch = async (input, options = {}) => {
   const url = new URL(input instanceof Request ? input.url : input);
   if (url.pathname === '/auth/v1/user') {
     return jsonResponse({ id: USER_ID, aud: 'authenticated' });
+  }
+  if (url.pathname === '/rest/v1/device_approvals') {
+    return jsonResponse([{ status: state.approvalStatus }]);
   }
   if (url.pathname !== '/rest/v1/notes') {
     assert.fail(`unexpected Supabase endpoint: ${url.pathname}`);
@@ -83,7 +88,10 @@ test('per-note API verifies the owner for reads, updates, and deletes', async (t
       method,
       url: '/api/notes/note-1',
       query: { id: 'note-1' },
-      headers: { authorization: 'Bearer x' },
+      headers: {
+        authorization: 'Bearer x',
+        cookie: `__Host-aleph-device=${DEVICE_ID}`,
+      },
       body,
     }, response);
     return { response: response.result, requests: state.databaseRequests };
@@ -91,6 +99,7 @@ test('per-note API verifies the owner for reads, updates, and deletes', async (t
 
   const ownRead = await invoke('GET');
   assert.equal(ownRead.response.statusCode, 200);
+  assert.match(ownRead.response.headers['x-request-id'], /^[0-9a-f-]{36}$/u);
   assert.deepEqual(ownRead.response.body, {
     note: { id: 'note-1', title: 'Title', body: '' },
   });
@@ -126,9 +135,18 @@ test('per-note API verifies the owner for reads, updates, and deletes', async (t
   });
   assert.equal(forgedRole.response.statusCode, 400);
   assert.equal(forgedRole.requests.some(item => item.method === 'PATCH'), false);
+
+  state.approvalStatus = 'revoked';
+  const revoked = await invoke('GET');
+  assert.equal(revoked.response.statusCode, 403);
+  assert.deepEqual(revoked.response.body, {
+    error: 'DEVICE_NOT_APPROVED',
+    status: 'revoked',
+  });
+  assert.deepEqual(revoked.requests, []);
 });
 
-test('per-note API accepts non-UUID IDs but rejects feature/query paths', async () => {
+test('per-note API rejects feature paths and out-of-zone query routes', async () => {
   const response = createResponse();
   await handler({
     method: 'GET',
@@ -145,5 +163,8 @@ test('per-note API accepts non-UUID IDs but rejects feature/query paths', async 
     query: { id: 'note-1', export: '1' },
     headers: {},
   }, queryResponse);
-  assert.equal(queryResponse.result.statusCode, 400);
+  assert.equal(queryResponse.result.statusCode, 403);
+  assert.deepEqual(queryResponse.result.body, {
+    error: 'Forbidden', reason: 'query_route_not_allowed',
+  });
 });

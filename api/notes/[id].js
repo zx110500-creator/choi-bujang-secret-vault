@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { createLoginVerifier } from '../../src/verify-login.mjs';
 import { readSessionCookies } from '../../src/auth-session.mjs';
+import { getDeviceApprovalStatus, getDeviceId } from '../../src/device-approval.mjs';
+import { setRequestId } from '../../src/request-id.mjs';
 import config from '../../aleph.config.json' with { type: 'json' };
 
 const NOTE_ID = /^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/u;
@@ -41,6 +43,7 @@ function getPatch(request) {
 
 export default async function handler(request, response) {
   response.setHeader('Cache-Control', 'no-store');
+  setRequestId(response);
   if (!['GET', 'PATCH', 'DELETE'].includes(request.method)) {
     response.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
     return;
@@ -48,7 +51,10 @@ export default async function handler(request, response) {
 
   const id = getNoteId(request);
   if (!id) {
-    response.status(400).json({ error: 'INVALID_NOTE_ID' });
+    const outsideRoute = typeof request.url === 'string' && request.url.includes('?');
+    response.status(outsideRoute ? 403 : 400).json(outsideRoute
+      ? { error: 'Forbidden', reason: 'query_route_not_allowed' }
+      : { error: 'INVALID_NOTE_ID' });
     return;
   }
 
@@ -77,6 +83,24 @@ export default async function handler(request, response) {
   }
   if (!verified?.userId) {
     response.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  let approvalStatus;
+  try {
+    approvalStatus = await getDeviceApprovalStatus(
+      verified.userId,
+      getDeviceId(request, response),
+    );
+  } catch (error) {
+    const code = error instanceof TypeError && error.message === 'supabase_not_configured'
+      ? 'SUPABASE_NOT_CONFIGURED'
+      : 'DEVICE_APPROVAL_CHECK_FAILED';
+    response.status(code === 'SUPABASE_NOT_CONFIGURED' ? 500 : 502).json({ error: code });
+    return;
+  }
+  if (approvalStatus !== 'approved') {
+    response.status(403).json({ error: 'DEVICE_NOT_APPROVED', status: approvalStatus });
     return;
   }
 

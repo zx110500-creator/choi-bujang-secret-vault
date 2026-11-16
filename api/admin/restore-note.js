@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { createLoginVerifier } from '../../src/verify-login.mjs';
 import { readSessionCookies } from '../../src/auth-session.mjs';
+import { getDeviceApprovalStatus, getDeviceId } from '../../src/device-approval.mjs';
+import { setRequestId } from '../../src/request-id.mjs';
 import config from '../../aleph.config.json' with { type: 'json' };
 
 const NOTE_ID = /^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/u;
@@ -62,6 +64,7 @@ function hasUnexpectedRequestData(request) {
 
 export default async function handler(request, response) {
   response.setHeader('Cache-Control', 'no-store');
+  setRequestId(response);
   if (request.method !== 'POST') {
     response.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
     return;
@@ -107,6 +110,25 @@ export default async function handler(request, response) {
     response.status(403).json({ error: 'RESTORE_ADMIN_REQUIRED' });
     return;
   }
+
+  let approvalStatus;
+  try {
+    approvalStatus = await getDeviceApprovalStatus(
+      verified.userId,
+      getDeviceId(request, response),
+    );
+  } catch (error) {
+    const code = error instanceof TypeError && error.message === 'supabase_not_configured'
+      ? 'SUPABASE_NOT_CONFIGURED'
+      : 'DEVICE_APPROVAL_CHECK_FAILED';
+    response.status(code === 'SUPABASE_NOT_CONFIGURED' ? 503 : 502).json({ error: code });
+    return;
+  }
+  if (approvalStatus !== 'approved') {
+    response.status(403).json({ error: 'DEVICE_NOT_APPROVED', status: approvalStatus });
+    return;
+  }
+
   const backup = getBackup();
   if (!backup) {
     response.status(503).json({ error: 'RESTORE_NOT_CONFIGURED' });

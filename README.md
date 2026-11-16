@@ -79,3 +79,39 @@ curl.exe -sS https://<현재-vercel-주소>/api/notes
 ```
 
 `/data.json`은 404이거나 메모가 없어야 합니다. 로그인하지 않은 `/api/auth/session`과 `/api/notes` GET 요청은 `401`과 `{"error":"Unauthorized"}`를 반환해야 합니다. 이전 공개 커밋·배포·캐시에 남은 자료는 현재 변경으로 삭제됐다고 가정하지 않습니다.
+
+## 11~12단계 자료실·탈환 작전실
+
+11단계 저장 커밋 `c41fff2`에서 승인 요청·상태 조회와 HttpOnly 기기 쿠키를 추가했습니다. 이 작업 트리에서는 자료 목록·단건 API와 관리자 복구 경로가 승인 상태가 `approved`일 때만 진행됩니다. 새 기기 승인 테이블은 `supabase/migrations/20261116000000_device_approvals.sql`을 적용해야 동작합니다.
+
+12단계 작전실은 `/api/ops/overview`의 실제 응답으로 판정기 규칙 목록과 현재 기기 승인 상태를 표시합니다. 현재 앱 API에는 판정기 강제 연결, 운영 탐지 사건, 복구 이력 버전 API가 없으므로 이를 성공으로 꾸미지 않고 미연결·미기록으로 표시합니다. 서명 규약이 없는 PATCH 기능은 유지하며 서명 검증 실측을 미실행으로 둡니다. 버튼은 고정된 읽기 전용 API 확인만 수행하며, 타인 메모·수정·복구 요청은 자동 실행하지 않습니다. 41종 전체 공격 시험과 운영 심판 판정은 미실행입니다.
+
+로컬 검증은 `node --test`, 정적 배포 빌드는 `npm run build -- --local`로 실행합니다. 이 명령들은 모의 API/로컬 결과일 뿐 실제 배포·DB·심판 판정을 증명하지 않습니다.
+
+### 새 환경에서 설치·실행·중지
+
+1. Node.js 22 이상과 npm을 준비하고 저장소를 받은 뒤 저장소 루트에서 `npm install`을 실행합니다.
+2. Supabase의 `supabase/migrations/20261116000000_device_approvals.sql`을 적용합니다. Vercel 프로젝트의 **Settings → Environment Variables**에 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SECRET_KEY`를 설정합니다. 메모 복구를 구성할 때는 `RESTORE_ADMIN_USER_ID`, `RESTORE_NOTE_ID`, `RESTORE_NOTE_OWNER_ID`, `RESTORE_NOTE_BACKUP_JSON`도 공식 설정 화면에 입력합니다. 변수 이름만 문서화하며 값은 README·소스·Git에 복사하지 않습니다.
+3. Vercel CLI로 프로젝트를 연결하고 공식 환경 설정을 로컬로 가져옵니다. `.env.local`은 비밀값을 포함하므로 공유하거나 커밋하지 않습니다.
+
+   ```powershell
+   npx --yes vercel login
+   npx --yes vercel link
+   npx --yes vercel env pull .env.local
+   ```
+
+4. `npx --yes vercel dev`로 정적 화면과 `/api/*` 함수를 함께 실행하고 표시된 로컬 주소를 엽니다. 종료할 때는 실행 중인 터미널에서 `Ctrl+C`를 누릅니다. Vercel CLI는 `package.json` 의존성이 아니므로 `npx`가 필요할 때 설치합니다.
+5. 로컬 회귀 검사는 `node --test`, 판정기/탐지 가상 연습은 `npm run decider:test`와 `npm run detect:test`로 실행합니다. 실제 공개 배포나 ALEPH 심판 접속 시험과는 구분합니다.
+
+### 데이터·정책 복구
+
+- 메모 복구 `POST /api/admin/restore-note`는 서버가 정한 한 메모만 복구합니다. 검증된 관리자 세션, 승인된 기기, 복구 대상 설정과 일치하는 백업 및 SHA-256 확인이 모두 필요합니다. 실행 전 대상·소유자·백업을 검토하고, 복구 후 서버에서 재조회해 결과를 확인합니다. 환경 변수에 값을 넣거나 실제 복구 요청을 보냈다는 뜻은 아닙니다.
+- 정책 복구 `npm run policy:restore`는 고정된 9단계 기준과 현재 정책의 diff를 보여 주는 계획입니다. `npm run policy:restore -- --apply`는 diff 검토 뒤 별도 로컬 작업 사본에서만 실행합니다. 이 복구는 정책 파일을 10단계 기준으로 되돌리므로 현재 12단계 작업이나 DB 메모 복구를 대신하지 않습니다.
+
+### 구현 출처와 범위
+
+- **학생 구현:** `public/`의 자료실/PWA 화면, `api/`의 로그인·자료 소유권·기기 승인·복구 처리, `src/decider.mjs`의 요청 판정 규칙, `src/detect.mjs`의 폭주 조회 탐지 함수입니다. 탐지 함수는 회수 제안을 반환하는 로컬 로직이며 운영 사건 수집·실제 회수 집행은 연결되지 않았습니다.
+- **제공된 엔진:** ALEPH SDP 엔진은 검증된 `aleph.decision.v1` 요청을 전달하고 학생 판정기의 5필드 응답 계약을 검사하는 운영 측 구성요소입니다. 엔진 코드나 운영 심판은 이 저장소가 제공·구현한 것으로 취급하지 않습니다. 앱 API와 `src/decider.mjs`의 판정 연결, 운영 탐지 이벤트, 신원 회수, 복구 이력 버전은 현재 미연결 상태이며 작전실도 이를 미연결/미실행으로 표시합니다.
+- PWA는 설치 설정과 오프라인 안내를 제공하지만 서비스 워커 기반 오프라인 자료 캐시는 구현하지 않았습니다. 본문·토큰·비밀키를 로그나 제출 묶음에 넣지 않습니다.
+
+`npm run bundle`은 커밋된 단계의 고정된 비인증 API 확인 결과만 제출 묶음에 기록합니다. 실행 전 저장소 변경을 커밋하고 `bundle-notes.json`은 제출용 설명으로만 갱신합니다. 제출 묶음은 실제 심판 통과나 배포 성공 증거가 아닙니다.
