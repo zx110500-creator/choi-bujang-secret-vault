@@ -54,7 +54,13 @@ try {
   if (normalizedRepo(config.repoUrl) !== repoUrl) {
     fail('aleph.config.json의 repoUrl이 Git origin 주소와 다릅니다. 같은 저장소 주소로 맞춰 주세요.');
   }
-  const notes = JSON.parse(readFileSync(join(root, 'bundle-notes.json'), 'utf8'));
+  let notes;
+  try {
+    notes = JSON.parse(readFileSync(join(root, 'bundle-notes.json'), 'utf8'));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+    notes = { explanation: '제출 설명 미제공: bundle-notes.json은 로컬 전용 입력입니다.' };
+  }
   if (!Number.isInteger(config.step) || config.step < 1 || config.step > 12) fail('aleph.config.json의 step을 확인해 주세요.');
   if (config.step >= 3 && (!config.identityProvider || typeof config.identityProvider !== 'object'
       || ['issuer', 'audience', 'jwksUrl'].some((key) => typeof config.identityProvider[key] !== 'string'
