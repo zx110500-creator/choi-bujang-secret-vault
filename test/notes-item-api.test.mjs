@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import notesHandler from '../api/notes.js';
 import handler from '../api/notes/[id].js';
 
 const USER_ID = '00000000-0000-4000-8000-000000000001';
@@ -167,4 +168,23 @@ test('per-note API rejects feature paths and out-of-zone query routes', async ()
   assert.deepEqual(queryResponse.result.body, {
     error: 'Forbidden', reason: 'query_route_not_allowed',
   });
+});
+
+test('anonymous list followed by a sentinel note ID lookup returns no note data', async () => {
+  const probes = [
+    [notesHandler, { method: 'GET', url: '/api/notes', query: {} }],
+    [handler, {
+      method: 'GET',
+      url: '/api/notes/ops-probe',
+      query: { id: 'ops-probe' },
+    }],
+  ];
+
+  for (const [probeHandler, request] of probes) {
+    const response = createResponse();
+    await probeHandler({ ...request, headers: {} }, response);
+    assert.ok([401, 403].includes(response.result.statusCode));
+    assert.equal(response.result.body?.notes, undefined);
+    assert.equal(response.result.body?.note, undefined);
+  }
 });

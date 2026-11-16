@@ -85,7 +85,7 @@
         </div>
       </div>
       <button id="refresh-ops-button" type="button">작전실 새로 조회</button>
-      <h3>1~11단계 안전 실측</h3>
+      <h3>12단계 번들 API 실측</h3>
       <p>본문·비밀값은 표에 기록하지 않습니다. 타인 메모, 실제 수정, 복구 작업은 자동 실행하지 않습니다.</p>
       <button id="run-verification-button" type="button">안전한 API 실측 실행</button>
       <p id="full-suite-status">41종 전체 공격 시험: 미실행(서버 심판 판정 대기)</p>
@@ -107,6 +107,8 @@
     </section>
   </main>
   <script type="module">
+    import { UNEXECUTED_CHECKS, VERIFICATION_PROBES } from '/verification-probes.mjs';
+
     const form = document.querySelector('#login-form');
     const email = document.querySelector('#email');
     const password = document.querySelector('#password');
@@ -130,90 +132,8 @@
     const runVerificationButton = document.querySelector('#run-verification-button');
 
     const verificationPlan = [
-      {
-        id: 'anonymous-list',
-        category: '1~11 / 거부',
-        request: '쿠키 없이 GET /api/notes',
-        expected: '401',
-        initial: '미실행',
-      },
-      {
-        id: 'approved-list',
-        category: '8·11 / 정상',
-        request: '현재 로그인 기기로 GET /api/notes',
-        expected: '200 (승인 기기)',
-        initial: '미실행',
-      },
-      {
-        id: 'anonymous-item',
-        category: '8 / 거부',
-        request: '쿠키 없이 GET /api/notes/ops-probe',
-        expected: '401',
-        initial: '미실행',
-      },
-      {
-        id: 'outside-query',
-        category: '8 / 구역 밖',
-        request: 'GET /api/notes/ops-probe?scope=outside',
-        expected: '403',
-        initial: '미실행',
-      },
-      {
-        id: 'device-status',
-        category: '11 / 승인 상태',
-        request: '현재 기기 GET /api/device-approval',
-        expected: '200 + 서버 상태',
-        initial: '미실행',
-      },
-      {
-        id: 'revoked-device',
-        category: '11 / 회수',
-        request: '회수된 기기로 GET /api/notes/ops-probe',
-        expected: '403',
-        initial: '미실행(실제 회수 상태일 때만 실행)',
-      },
-      {
-        id: 'revoked-identity',
-        category: '11 / 회수 신원',
-        request: '회수된 신원 세션 재사용',
-        expected: '401',
-        initial: '미실행(신원 회수 API 미연결)',
-      },
-      {
-        id: 'foreign-note',
-        category: '8 / 타인 메모',
-        request: '타인 소유 메모 단건 GET',
-        expected: '403',
-        initial: '미실행(안전한 타인 시험 ID 없음)',
-      },
-      {
-        id: 'unregistered-device',
-        category: '6·11 / 미등록 기기',
-        request: '별도 미등록 기기로 GET /api/notes',
-        expected: '403',
-        initial: '미실행(격리 브라우저 필요)',
-      },
-      {
-        id: 'unsigned-update',
-        category: '8·10 / 서명 없는 수정',
-        request: 'PATCH 서명 검증',
-        expected: '서명 규약 미정',
-        initial: '미실행(기존 수정 기능 보존)',
-      },
-      {
-        id: 'detection-events',
-        category: '9 / 탐지',
-        request: '운영 탐지 사건 API 조회',
-        expected: '실제 사건 요약',
-        initial: '미실행(운영 사건 API 미연결)',
-      },
-      {
-        id: 'restore-version',
-        category: '10 / 복구',
-        request: '복구 이력/버전 API 조회',
-        expected: '실제 복구 버전',
-        initial: '미실행(복구 이력 API 없음)',
-      },
+      ...VERIFICATION_PROBES,
+      ...UNEXECUTED_CHECKS,
     ];
 
     function renderVerificationPlan() {
@@ -307,32 +227,21 @@
       runVerificationButton.disabled = true;
       runVerificationButton.textContent = '실측 중…';
       renderVerificationPlan();
-      const probe = async (id, url, credentials, expectedStatus, readApproval = false) => {
+      const probe = async item => {
         try {
-          const response = await fetch(url, {
-            method: 'GET',
+          const response = await fetch(item.path, {
+            method: item.method,
             cache: 'no-store',
-            credentials,
+            credentials: 'omit',
           });
           const checkedAt = new Date().toISOString();
-          let detail = '';
-          let approvalStatusValue = null;
-          if (readApproval && response.ok) {
-            const result = await response.json();
-            if (typeof result?.status === 'string') {
-              approvalStatusValue = result.status;
-              detail = ` · ${approvalStatusValue}`;
-            }
-          }
-          const match = response.status === expectedStatus;
-          updateVerificationResult(id, {
-            actual: `HTTP ${response.status}${detail} · ${match ? '기대와 일치' : `기대 HTTP ${expectedStatus}`}`,
+          updateVerificationResult(item.id, {
+            actual: `HTTP ${response.status}`,
             requestId: response.headers.get('x-request-id'),
             checkedAt,
           });
-          return { response, approvalStatusValue };
         } catch {
-          updateVerificationResult(id, {
+          updateVerificationResult(item.id, {
             actual: '네트워크 오류 · 결과 미확인',
             requestId: '—',
             checkedAt: new Date().toISOString(),
@@ -342,16 +251,7 @@
       };
 
       try {
-        await probe('anonymous-list', '/api/notes', 'omit', 401);
-        await probe('anonymous-item', '/api/notes/ops-probe', 'omit', 401);
-        await probe('outside-query', '/api/notes/ops-probe?scope=outside', 'omit', 403);
-        const approvalProbe = await probe(
-          'device-status', '/api/device-approval', 'same-origin', 200, true,
-        );
-        if (approvalProbe?.approvalStatusValue === 'revoked') {
-          await probe('revoked-device', '/api/notes/ops-probe', 'same-origin', 403);
-        }
-        await probe('approved-list', '/api/notes', 'same-origin', 200);
+        for (const item of VERIFICATION_PROBES) await probe(item);
       } finally {
         runVerificationButton.disabled = false;
         runVerificationButton.textContent = '안전한 API 실측 실행';

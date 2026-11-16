@@ -1,3 +1,5 @@
+import { VERIFICATION_PROBES } from '../public/verification-probes.mjs';
+
 const ACCESS_TOKEN_ENV = 'ALEPH_TEST_ACCESS_TOKEN';
 const FOREIGN_NOTE_ID_ENV = 'ALEPH_TEST_FOREIGN_NOTE_ID';
 const ALLOW_MUTATIONS_ENV = 'ALEPH_TEST_ALLOW_MUTATION';
@@ -187,26 +189,13 @@ async function checkStageTen(app) {
 }
 
 async function checkStageTwelve(app) {
-  const probes = [
-    ['anonymous_session_check', '/api/auth/session', 'GET',
-      '비로그인 세션 조회는 HTTP 401 또는 403'],
-    ['anonymous_note_list', '/api/notes', 'GET',
-      '비로그인 메모 목록 조회는 HTTP 401 또는 403'],
-    ['anonymous_note_item', '/api/notes/ops-probe', 'GET',
-      '비로그인 메모 단건 조회는 HTTP 401 또는 403'],
-    ['out_of_zone_query', '/api/notes/ops-probe?scope=outside', 'GET',
-      '허용되지 않은 쿼리 경로는 접근 거부'],
-    ['anonymous_device_status', '/api/device-approval', 'GET',
-      '비로그인 기기 상태 조회는 HTTP 401 또는 403'],
-    ['anonymous_ops_overview', '/api/ops/overview', 'GET',
-      '비로그인 작전실 조회는 HTTP 401 또는 403'],
-    ['anonymous_restore_note', '/api/admin/restore-note', 'POST',
-      '비로그인 복구 요청은 HTTP 401 또는 403'],
-  ];
   const attempts = [];
-  for (const [attackId, path, method, expected] of probes) {
-    const response = await sendNotesRequest(new URL(path, app), { method });
-    attempts.push(result(attackId, expected, observedStatus(response)));
+  for (const probe of VERIFICATION_PROBES) {
+    const response = await sendNotesRequest(new URL(probe.path, app), {
+      method: probe.method,
+      credentials: 'omit',
+    });
+    attempts.push(result(probe.id, probe.expected, observedStatus(response)));
   }
   return attempts;
 }
