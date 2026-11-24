@@ -198,6 +198,7 @@ async function checkStageTwelve(app) {
     const response = await sendNotesRequest(new URL(probe.path, app), {
       method: probe.method,
       credentials: 'omit',
+      alephEvidence: { caseId: probe.id, requestKey: 'probe' },
     });
     attempts.push(result(probe.id, probe.expected, observedStatus(response)));
   }

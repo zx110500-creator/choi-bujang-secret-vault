@@ -33,6 +33,8 @@ test('step-12 bundle checks use only fixed unauthenticated requests and actual s
     assert.ok(requests.every(({ options }) => !options.headers
       && options.credentials === 'omit'
       && ['GET', 'HEAD'].includes(options.method)));
+    assert.deepEqual(requests.map(({ options }) => options.alephEvidence),
+      sendableProbes.map(probe => ({ caseId: probe.id, requestKey: 'probe' })));
     assert.deepEqual(attempts.map(item => item.observed),
       VERIFICATION_PROBES.map(probe => {
         const index = sendableProbes.indexOf(probe);
