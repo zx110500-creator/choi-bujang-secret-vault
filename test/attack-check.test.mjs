@@ -7,7 +7,9 @@ test('step-12 bundle checks use only fixed unauthenticated requests and actual s
   async (testContext) => {
     const previousFetch = globalThis.fetch;
     const requests = [];
-    const statuses = [401, 401, 403, 403, 401, 401, 401];
+    const sendableProbes = VERIFICATION_PROBES.filter(({ method }) =>
+      ['GET', 'HEAD'].includes(method));
+    const statuses = [401, 401, 403, 403, 401, 401];
     globalThis.fetch = async (input, options = {}) => {
       const url = new URL(input);
       requests.push({ url, options });
@@ -22,16 +24,20 @@ test('step-12 bundle checks use only fixed unauthenticated requests and actual s
       publicAppUrl: 'https://byte-back-test.invalid',
     });
 
-    assert.equal(requests.length, VERIFICATION_PROBES.length);
+    assert.equal(requests.length, sendableProbes.length);
     assert.ok(requests.every(({ url }) => url.origin === 'https://byte-back-test.invalid'));
     assert.deepEqual(requests.map(({ url }) => `${url.pathname}${url.search}`),
-      VERIFICATION_PROBES.map(probe => probe.path));
+      sendableProbes.map(probe => probe.path));
     assert.deepEqual(requests.map(({ options }) => options.method),
-      VERIFICATION_PROBES.map(probe => probe.method));
+      sendableProbes.map(probe => probe.method));
     assert.ok(requests.every(({ options }) => !options.headers
-      && options.credentials === 'omit'));
+      && options.credentials === 'omit'
+      && ['GET', 'HEAD'].includes(options.method)));
     assert.deepEqual(attempts.map(item => item.observed),
-      statuses.map(status => `HTTP ${status}`));
+      VERIFICATION_PROBES.map(probe => {
+        const index = sendableProbes.indexOf(probe);
+        return index === -1 ? 'not_run' : `HTTP ${statuses[index]}`;
+      }));
     assert.equal(attempts.length, VERIFICATION_PROBES.length);
     assert.ok(UNEXECUTED_CHECKS.find(item => item.id === 'foreign-note-owner')
       .initial.startsWith('미실행'));

@@ -191,6 +191,10 @@ async function checkStageTen(app) {
 async function checkStageTwelve(app) {
   const attempts = [];
   for (const probe of VERIFICATION_PROBES) {
+    if (!['GET', 'HEAD'].includes(probe.method)) {
+      attempts.push(result(probe.id, probe.expected, 'not_run'));
+      continue;
+    }
     const response = await sendNotesRequest(new URL(probe.path, app), {
       method: probe.method,
       credentials: 'omit',

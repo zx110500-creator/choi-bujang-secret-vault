@@ -251,7 +251,17 @@
       };
 
       try {
-        for (const item of VERIFICATION_PROBES) await probe(item);
+        for (const item of VERIFICATION_PROBES) {
+          if (!['GET', 'HEAD'].includes(item.method)) {
+            updateVerificationResult(item.id, {
+              actual: '미실행',
+              requestId: '—',
+              checkedAt: '—',
+            });
+            continue;
+          }
+          await probe(item);
+        }
       } finally {
         runVerificationButton.disabled = false;
         runVerificationButton.textContent = '안전한 API 실측 실행';
